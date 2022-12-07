@@ -2,9 +2,16 @@
  * Copyright(c) 2022 Intel Corporation
  */
 
+#include <arpa/inet.h>
+#include <inttypes.h>
+#include <obs/util/bmem.h>
+#include <obs/util/platform.h>
+#include <obs/util/threading.h>
+
 #include "linux-mtl.h"
 
-#define MTL_RX_SESSION(voidptr) struct mtl_rx_session* s = voidptr;
+#define MTL_RX_SESSION(voidptr) \
+  struct mtl_rx_session* s = (struct mtl_rx_session*)voidptr;
 
 /**
  * Data structure for the mtl source
@@ -125,7 +132,7 @@ static void* mtl_thread(void* vptr) {
     pthread_mutex_unlock(&s->wake_mutex);
 
     for (uint_fast32_t i = 0; i < MAX_AV_PLANES; ++i)
-      out.data[i] = frame->addr[0] + plane_offsets[i];
+      out.data[i] = (uint8_t*)frame->addr[0] + plane_offsets[i];
     out.timestamp = frame->timestamp;
 
     obs_source_output_video(s->source, &out);
@@ -368,9 +375,8 @@ static void mtl_input_init(struct mtl_rx_session* s) {
   s->stop = false;
   pthread_mutex_init(&s->wake_mutex, NULL);
   pthread_cond_init(&s->wake_cond, NULL);
-  int ret = pthread_create(&s->thread, NULL, mtl_thread, s);
-  if (ret < 0) {
-    blog(LOG_ERROR, "%s(%d), app_thread create fail\n", __func__, ret);
+  if (pthread_create(&s->thread, NULL, mtl_thread, s) < 0) {
+    blog(LOG_ERROR, "%s, app_thread create fail\n", __func__);
     goto error;
   }
 
@@ -393,15 +399,16 @@ static void mtl_input_update(void* vptr, obs_data_t* settings) {
   s->payload_type = obs_data_get_int(settings, "payload_type");
   s->width = obs_data_get_int(settings, "width");
   s->height = obs_data_get_int(settings, "height");
-  s->fps = obs_data_get_int(settings, "fps");
-  s->t_fmt = obs_data_get_int(settings, "t_fmt");
-  s->v_fmt = obs_data_get_int(settings, "v_fmt");
+  s->fps = (enum st_fps)obs_data_get_int(settings, "fps");
+  s->t_fmt = (enum st20_fmt)obs_data_get_int(settings, "t_fmt");
+  s->v_fmt = (enum video_format)obs_data_get_int(settings, "v_fmt");
   s->framebuffer_cnt = obs_data_get_int(settings, "framebuffer_cnt");
-  s->log_level = obs_data_get_int(settings, "log_level");
+  s->log_level = (enum mtl_log_level)obs_data_get_int(settings, "log_level");
 }
 
 static void* mtl_input_create(obs_data_t* settings, obs_source_t* source) {
-  struct mtl_rx_session* s = bzalloc(sizeof(struct mtl_rx_session));
+  struct mtl_rx_session* s =
+      (struct mtl_rx_session*)bzalloc(sizeof(struct mtl_rx_session));
   s->source = source;
 
   mtl_input_update(s, settings);
@@ -416,8 +423,8 @@ struct obs_source_info mtl_input = {
     .get_name = mtl_input_getname,
     .create = mtl_input_create,
     .destroy = mtl_input_destroy,
-    .update = mtl_input_update,
     .get_defaults = mtl_input_defaults,
     .get_properties = mtl_input_properties,
+    .update = mtl_input_update,
     .icon_type = OBS_ICON_TYPE_MEDIA,
 };

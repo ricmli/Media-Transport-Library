@@ -2,11 +2,18 @@
  * Copyright(c) 2022 Intel Corporation
  */
 
+#include <arpa/inet.h>
+#include <inttypes.h>
+#include <obs/util/bmem.h>
+#include <obs/util/platform.h>
+#include <obs/util/threading.h>
+
 #include "linux-mtl.h"
 
-#if TODO_OUTPUT
+#if defined(TODO_OUTPUT)
 
-#define MTL_TX_SESSION(voidptr) struct mtl_tx_session* s = voidptr;
+#define MTL_TX_SESSION(voidptr) \
+  struct mtl_tx_session* s = (struct mtl_tx_session*)voidptr;
 
 /**
  * Data structure for the mtl source
@@ -32,11 +39,6 @@ struct mtl_tx_session {
 
   uint64_t total_bytes;
 };
-
-/* forward declarations */
-static void mtl_output_init(struct mtl_tx_session* s);
-static void mtl_output_terminate(struct mtl_tx_session* s);
-static void mtl_output_update(void* vptr, obs_data_t* settings);
 
 static const char* mtl_output_getname(void* unused) {
   UNUSED_PARAMETER(unused);
@@ -97,7 +99,9 @@ static obs_properties_t* mtl_output_properties(void* vptr) {
   return props;
 }
 
-static void mtl_output_terminate(struct mtl_tx_session* s) {
+static void mtl_output_stop(void* vptr, uint64_t ts) {
+  MTL_TX_SESSION(vptr);
+
   if (s->dev_handle) {
     mtl_stop(s->dev_handle);
   }
@@ -111,6 +115,8 @@ static void mtl_output_terminate(struct mtl_tx_session* s) {
     mtl_uninit(s->dev_handle);
     s->dev_handle = NULL;
   }
+
+  UNUSED_PARAMETER(ts);
 }
 
 static void mtl_output_destroy(void* vptr) {
@@ -118,12 +124,11 @@ static void mtl_output_destroy(void* vptr) {
 
   if (!s) return;
 
-  mtl_output_terminate(s);
-
   bfree(s);
 }
 
-static void mtl_output_init(struct mtl_tx_session* s) {
+static bool mtl_output_start(void* vptr) {
+  MTL_TX_SESSION(vptr);
   struct mtl_init_params param;
 
   memset(&param, 0, sizeof(param));
@@ -176,15 +181,18 @@ static void mtl_output_init(struct mtl_tx_session* s) {
   }
 
   mtl_start(s->dev_handle);
-  return;
+  return true;
 
 error:
   blog(LOG_ERROR, "Initialization failed, errno: %s", strerror(errno));
-  mtl_output_terminate(s);
+  mtl_output_stop(s);
+  return false;
 }
 
-static void mtl_output_update(void* vptr, obs_data_t* settings) {
-  MTL_TX_SESSION(vptr);
+static void* mtl_output_create(obs_data_t* settings, obs_output_t* output) {
+  struct mtl_tx_session* s =
+      (struct mtl_tx_session*)bzalloc(sizeof(struct mtl_tx_session));
+  s->output = output;
 
   s->port = (char*)obs_data_get_string(settings, "port");
   s->lcores = (char*)obs_data_get_string(settings, "lcores");
@@ -192,18 +200,9 @@ static void mtl_output_update(void* vptr, obs_data_t* settings) {
   s->ip = (char*)obs_data_get_string(settings, "ip");
   s->udp_port = obs_data_get_int(settings, "udp_port");
   s->payload_type = obs_data_get_int(settings, "payload_type");
-  s->t_fmt = obs_data_get_int(settings, "t_fmt");
+  s->t_fmt = (enum st20_fmt)obs_data_get_int(settings, "t_fmt");
   s->framebuffer_cnt = obs_data_get_int(settings, "framebuffer_cnt");
-  s->log_level = obs_data_get_int(settings, "log_level");
-
-  mtl_output_init(s);
-}
-
-static void* mtl_output_create(obs_data_t* settings, obs_output_t* output) {
-  struct mtl_tx_session* s = bzalloc(sizeof(struct mtl_tx_session));
-  s->output = output;
-
-  mtl_output_update(s, settings);
+  s->log_level = (enum mtl_log_level)obs_data_get_int(settings, "log_level");
 
   return s;
 }
@@ -244,7 +243,8 @@ struct obs_output_info mtl_output = {
     .destroy = mtl_output_destroy,
     .raw_video = mtl_output_video_frame,
     .get_total_bytes = mtl_output_total_bytes,
-    .update = mtl_output_update,
+    .start = mtl_output_start,
+    .stop = mtl_output_stop,
     .get_defaults = mtl_output_defaults,
     .get_properties = mtl_output_properties,
 };

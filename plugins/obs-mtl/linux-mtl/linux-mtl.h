@@ -5,18 +5,10 @@
 #ifndef _LINUX_MTL_HEAD_H_
 #define _LINUX_MTL_HEAD_H_
 
-#include <arpa/inet.h>
-#include <inttypes.h>
 #include <mtl/st_pipeline_api.h>
 #include <obs/obs-module.h>
-#include <obs/util/bmem.h>
-#include <obs/util/platform.h>
-#include <obs/util/threading.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
+
+#define TODO_OUTPUT
 
 #define timeval2ns(tv) \
   (((uint64_t)tv.tv_sec * 1000000000) + ((uint64_t)tv.tv_usec * 1000))

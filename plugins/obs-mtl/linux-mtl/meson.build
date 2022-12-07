@@ -1,35 +1,36 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright 2022 Intel Corporation
 
-project('linux-mtl', 'c', default_options: ['buildtype=release'],
+project('linux-mtl', 'cpp', default_options: ['buildtype=release'],
         version: run_command(find_program('cat', 'more'), files('../../../VERSION'), check: true).stdout().strip(),)
 
-cc = meson.get_compiler('c')
+cppc = meson.get_compiler('cpp')
 
 # deps
 libobs = dependency('libobs', required : true)
 mtl = dependency('mtl', required : true)
-pthread_dep = cc.find_library('pthread', required : true)
+pthread_dep = cppc.find_library('pthread', required : true)
+qt5 = import('qt5')
+qt5_dep = dependency('qt5', modules: ['Core', 'Gui'])
 
 libobs_libdir = libobs.get_variable(pkgconfig: 'libdir')
 libobs_prefix = libobs.get_variable(pkgconfig: 'prefix')
 
 # sources
 sources = files(
-	'linux-mtl.c',
-	'mtl-input.c',
-  'mtl-output.c',
+	'linux-mtl.cpp',
+	'mtl-input.cpp',
+  'mtl-output.cpp',
 )
 
 # args
-linux_mtl_c_args = []
-linux_mtl_c_args += ['-UHAVE_OBSCONFIG_H']
-linux_mtl_c_args += ['-Wno-stringop-truncation']
+linux_mtl_cpp_args = []
+linux_mtl_cpp_args += ['-Wno-stringop-truncation']
 
 # build library
 shared_library(meson.project_name(), sources,
-  dependencies: [libobs, mtl, pthread_dep,],
-  c_args : linux_mtl_c_args,
+  dependencies: [libobs, mtl, pthread_dep, qt5_dep],
+  cpp_args : linux_mtl_cpp_args,
   install: true,
   install_dir : libobs_libdir + '/obs-plugins/'
 )
