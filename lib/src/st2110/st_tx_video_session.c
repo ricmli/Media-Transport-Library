@@ -2318,7 +2318,7 @@ static void tv_stat(struct st_tx_video_sessions_mgr* mgr,
   rte_atomic32_set(&s->stat_frame_cnt, 0);
 
   notice(
-      "TX_VIDEO_SESSION(%d,%d:%s): fps %f, frame %d pkts %d:%d inflight %d:%d, cpu busy "
+      "TX_VIDEO_SESSION(%d,%d:%s): fps %f frames %d pkts %d:%d inflight %d:%d, cpu busy "
       "%f\n",
       m_idx, idx, s->ops_name, framerate, frame_cnt, s->stat_pkts_build,
       s->stat_pkts_burst, s->trs_inflight_cnt[0], s->inflight_cnt[0], s->cpu_busy_score);

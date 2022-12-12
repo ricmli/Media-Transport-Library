@@ -161,6 +161,14 @@ struct mt_ptp_impl {
   uint64_t expect_result_start_ns;
   uint64_t expect_result_period_ns;
 
+  /* pi controller */
+  double i_state; /* integrator state */
+  /* use const? */
+  double i_max; /* max integral */
+  double i_min; /* min integral */
+  double ki;    /* proportion gain */
+  double kp;    /* integral gain */
+
   /* status */
   int64_t stat_delta_min;
   int64_t stat_delta_max;

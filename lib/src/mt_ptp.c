@@ -6,7 +6,7 @@
 
 #include "mt_cni.h"
 #include "mt_dev.h"
-//#define DEBUG
+// #define DEBUG
 #include "mt_log.h"
 #include "mt_mcast.h"
 #include "mt_sch.h"
@@ -17,6 +17,7 @@
 #define MT_PTP_CHECK_TX_TIME_STAMP (0)
 #define MT_PTP_CHECK_RX_TIME_STAMP (0)
 #define MT_PTP_PRINT_ERR_RESULT (0)
+#define MT_PTP_PI_DELTA (1)
 
 #define MT_PTP_EBU_SYNC_MS (10)
 
@@ -100,6 +101,22 @@ static inline void ptp_set_master_addr(struct mt_ptp_impl* ptp,
   } else {
     rte_ether_addr_copy(&ptp->master_addr, d_addr);
   }
+}
+
+static int64_t ptp_update_pi(struct mt_ptp_impl* ptp, int64_t delta) {
+#if MT_PTP_PI_DELTA
+  double p_result = ptp->kp * delta;
+  ptp->i_state += delta;
+  // ptp->i_state = RTE_MIN(RTE_MAX(ptp->i_state, ptp->i_min), ptp->i_max);
+  double i_result = ptp->ki * ptp->i_state;
+
+  info("%s(%d), delta %" PRId64 ", p_res %lf, i_res %lf\n", __func__, ptp->port, delta,
+       p_result, i_result);
+  return p_result + i_result;
+#else
+  info("%s(%d), delta %" PRId64 "\n", __func__, ptp->port, delta);
+  return delta;
+#endif
 }
 
 static void ptp_adjust_delta(struct mt_ptp_impl* ptp, int64_t delta) {
@@ -205,15 +222,17 @@ static int ptp_parse_result(struct mt_ptp_impl* ptp) {
         dbg("%s(%d), reset the result as too many errors\n", __func__, ptp->port);
         ptp_result_reset(ptp);
       }
+#if !MT_PTP_PI_DELTA
       if (ptp->expect_result_avg) {
         ptp_adjust_delta(ptp, ptp->expect_result_avg);
       }
       return -EIO;
+#endif
     }
   }
   ptp->delta_result_err = 0;
 
-  ptp_adjust_delta(ptp, delta);
+  ptp_adjust_delta(ptp, ptp_update_pi(ptp, delta));
   ptp_t_result_clear(ptp);
 
   if (ptp->delta_result_cnt > 10) {
@@ -592,6 +611,13 @@ static int ptp_init(struct mtl_main_impl* impl, struct mt_ptp_impl* ptp,
   ptp->mbuf_pool = mt_get_tx_mempool(impl, port);
   ptp->master_initialized = false;
   ptp->t3_sequence_id = 0x1000 * port;
+
+  /* init pi */
+  ptp->kp = 0.7;
+  ptp->ki = 0.3;
+  // ptp->i_max = 1000000.0;
+  // ptp->i_min = -1000000.0;
+  ptp->i_state = 0;
 
   struct mtl_init_params* p = mt_get_user_params(impl);
   if (p->flags & MTL_FLAG_PTP_UNICAST_ADDR) {
