@@ -68,8 +68,13 @@ if is_windows
   app_c_args += [libopensslcflags.stdout().strip().split()]
 endif
 
-# simd build option, enable sse4.2 default, todo: do we need AVX2/AVX512 for app ?
+# simd build option, enable sse4.2 default
 app_c_args += ['-msse4.2']
+if get_option('enable_native') == true
+  message('Enable -march=native for app')
+  app_c_args += ['-march=native']
+  app_c_args += ['-DAPP_ENABLE_NATIVE']
+endif
 
 if is_windows
   app_ld_args += ['-lmingw32','-lws2_32','-lDbghelp','-lSetupapi','-ldinput8', '-ldxguid', '-ldxerr8', '-lwinmm', '-limm32','-lversion','-lwpcap','-lPacket','-lSDL2','-lSDL2Main','-lmman','-ljson-c','-ldl']

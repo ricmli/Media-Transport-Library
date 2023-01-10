@@ -3,6 +3,10 @@
  */
 
 #include "sample_util.h"
+#ifdef APP_ENABLE_NATIVE
+#include <immintrin.h>
+#endif
+#include <rte_cycles.h>
 
 struct rx_st20p_tx_st20p_sample_ctx {
   mtl_handle st;
@@ -48,13 +52,58 @@ static int rx_st20p_frame_available(void* priv) {
 /* downsample and resize the frame to (w/2)*(h/2) */
 static int fwd_frame_downsample(struct rx_st20p_tx_st20p_sample_ctx* s,
                                 struct st_frame* old_frame, struct st_frame* new_frame) {
-  for (int line = 0; line < new_frame->height; line++) {
+  uint32_t width = new_frame->width;
+  uint32_t height = new_frame->height;
+  uint32_t pg_size = s->st20_pg.size;
+  uint32_t pixels_per_pg = s->st20_pg.coverage;
+#ifdef APP_ENABLE_NATIVE
+  enum mtl_simd_level cpu_level = mtl_get_simd_level();
+  (void)(cpu_level);
+
+  if (cpu_level >= MTL_SIMD_LEVEL_AVX512_VBMI2) {
+    int new_pg_in_zmm = (64 / pg_size) / 2;
+    uint64_t k_old = 0x0;
+    for (int i = 0; i < new_pg_in_zmm; i++) {
+      k_old = k_old << (pg_size * 2);
+      k_old += (1 << pg_size) - 1;
+    }
+    /* for yuv422be10 k = 0b1111100000111110000011111000001111100000111110000011111 */
+    __mmask64 k = k_old;
+    /* calculate batch size */
+    int new_pg_per_line = width / pixels_per_pg;
+    int batches = new_pg_per_line / new_pg_in_zmm;
+    for (int line = 0; line < height; line++) {
+      /* calculate offset */
+      uint8_t* src = old_frame->addr[0] + old_frame->linesize[0] * line * 2;
+      uint8_t* dst = new_frame->addr[0] + new_frame->linesize[0] * line;
+      /* for each batch */
+      for (int i = 0; i < batches; i++) {
+        __m512i input = _mm512_loadu_si512(src);
+        _mm512_mask_compressstoreu_epi8(dst, k, input);
+        src += new_pg_in_zmm * 2 * pg_size;
+        dst += new_pg_in_zmm * pg_size;
+      }
+      /* handle left pgs */
+      int left = new_pg_per_line % new_pg_in_zmm;
+      while (left) {
+        mtl_memcpy(dst, src, pg_size);
+        src += 2 * pg_size;
+        dst += pg_size;
+        left--;
+      }
+    }
+    return 0;
+  }
+
+/* scalar fallback */
+#endif
+  for (int line = 0; line < height; line++) {
     uint8_t* src = old_frame->addr[0] + old_frame->linesize[0] * line * 2;
     uint8_t* dst = new_frame->addr[0] + new_frame->linesize[0] * line;
-    for (int pg = 0; pg < new_frame->width / s->st20_pg.coverage; pg++) {
-      mtl_memcpy(dst, src, s->st20_pg.size);
-      src += 2 * s->st20_pg.size;
-      dst += s->st20_pg.size;
+    for (int pg = 0; pg < width / pixels_per_pg; pg++) {
+      mtl_memcpy(dst, src, pg_size);
+      src += 2 * pg_size;
+      dst += pg_size;
     }
   }
   return 0;
@@ -74,7 +123,10 @@ static void fwd_st20_consume_frame(struct rx_st20p_tx_st20p_sample_ctx* s,
       continue;
     }
 
+    uint64_t start = rte_get_tsc_cycles();
     fwd_frame_downsample(s, frame, tx_frame);
+    uint64_t end = rte_get_tsc_cycles();
+    info("%lu cycles elapsed\n", end - start);
     st20p_tx_put_frame(tx_handle, tx_frame);
 
     s->fb_fwd++;

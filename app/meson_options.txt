@@ -2,3 +2,4 @@
 # Copyright 2022 Intel Corporation
 
 option('enable_asan', type: 'boolean', value: false, description: 'enable/disable address sanitizer, debug usage only')
+option('enable_native', type: 'boolean', value: true, description: 'enable/disable native build with max simd, debug usage only')
