@@ -2593,7 +2593,9 @@ static int rv_init_hw(struct mtl_main_impl* impl, struct st_rx_video_session_imp
     }
 
     /* no flow for data path only */
-    if (mt_pmd_is_kernel(impl, port) && (ops->flags & ST20_RX_FLAG_DATA_PATH_ONLY))
+    struct mt_interface* inf = mt_if(impl, port);
+    if (inf->drv_type == MT_DRV_ENA ||
+        (mt_pmd_is_kernel(impl, port) && (ops->flags & ST20_RX_FLAG_DATA_PATH_ONLY)))
       s->queue[i] = mt_dev_get_rx_queue(impl, port, NULL);
     else
       s->queue[i] = mt_dev_get_rx_queue(impl, port, &flow);
