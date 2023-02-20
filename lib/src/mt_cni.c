@@ -254,7 +254,7 @@ static bool cni_if_need(struct mtl_main_impl* impl) {
   int num_ports = mt_num_ports(impl);
 
   for (int i = 0; i < num_ports; i++) {
-    if (!mt_pmd_is_kernel(impl, i)) return true;
+    // if (!mt_pmd_is_kernel(impl, i)) return true;
   }
 
   return false;
