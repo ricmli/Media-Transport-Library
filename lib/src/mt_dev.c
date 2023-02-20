@@ -905,7 +905,7 @@ static int dev_config_port(struct mtl_main_impl* impl, enum mtl_port port) {
   inf->nb_tx_desc = nb_tx_desc;
   inf->nb_rx_desc = nb_rx_desc;
 
-  if (!mt_pmd_is_kernel(impl, port)) {
+  if (!mt_pmd_is_kernel(impl, port) && inf->drv_type != MT_DRV_ENA) {
     /* enable PTYPE for packet classification by NIC */
     uint32_t ptypes[16];
     uint32_t set_ptypes[16];
