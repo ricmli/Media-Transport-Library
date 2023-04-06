@@ -93,6 +93,7 @@ enum st_args_cmd {
   ST_ARG_RSS_MODE,
   ST_ARG_RANDOM_SRC_PORT,
   ST_ARG_TX_NO_CHAIN,
+  ST_ARG_RX_MONO_QUEUE,
   ST_ARG_MAX,
 };
 
@@ -187,6 +188,7 @@ static struct option st_app_args_options[] = {
     {"rss_mode", required_argument, 0, ST_ARG_RSS_MODE},
     {"random_src_port", no_argument, 0, ST_ARG_RANDOM_SRC_PORT},
     {"tx_no_chain", no_argument, 0, ST_ARG_TX_NO_CHAIN},
+    {"rx_mono_queue", no_argument, 0, ST_ARG_RX_MONO_QUEUE},
 
     {0, 0, 0, 0}};
 
@@ -565,6 +567,9 @@ int st_app_parse_args(struct st_app_context* ctx, struct mtl_init_params* p, int
         break;
       case ST_ARG_TX_NO_CHAIN:
         p->flags |= MTL_FLAG_TX_NO_CHAIN;
+        break;
+      case ST_ARG_RX_MONO_QUEUE:
+        p->flags |= MTL_FLAG_RX_MONO_QUEUE;
         break;
       case '?':
         break;

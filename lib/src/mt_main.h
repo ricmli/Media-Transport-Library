@@ -994,6 +994,13 @@ static inline bool mt_has_tx_no_chain(struct mtl_main_impl* impl) {
     return false;
 }
 
+static inline bool mt_has_rx_mono_queue(struct mtl_main_impl* impl) {
+  if (mt_get_user_params(impl)->flags & MTL_FLAG_RX_MONO_QUEUE)
+    return true;
+  else
+    return false;
+}
+
 static inline enum mtl_rss_mode mt_get_rss_mode(struct mtl_main_impl* impl,
                                                 enum mtl_port port) {
   return mt_if(impl, port)->rss_mode;

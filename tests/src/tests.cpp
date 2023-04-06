@@ -42,6 +42,7 @@ enum test_args_cmd {
   TEST_ARG_RSS_MODE,
   TEST_ARG_TX_NO_CHAIN,
   TEST_ARG_IOVA_MODE,
+  TEST_ARG_RX_MONO_QUEUE,
 };
 
 static struct option test_args_options[] = {
@@ -76,6 +77,7 @@ static struct option test_args_options[] = {
     {"rss_mode", required_argument, 0, TEST_ARG_RSS_MODE},
     {"tx_no_chain", no_argument, 0, TEST_ARG_TX_NO_CHAIN},
     {"iova_mode", required_argument, 0, TEST_ARG_IOVA_MODE},
+    {"rx_mono_queue", no_argument, 0, TEST_ARG_RX_MONO_QUEUE},
 
     {0, 0, 0, 0}};
 
@@ -258,6 +260,9 @@ static int test_parse_args(struct st_tests_context* ctx, struct mtl_init_params*
           p->iova_mode = MTL_IOVA_MODE_PA;
         else
           err("%s, unknow iova mode %s\n", __func__, optarg);
+        break;
+      case TEST_ARG_RX_MONO_QUEUE:
+        p->flags |= MTL_FLAG_RX_MONO_QUEUE;
         break;
       default:
         break;
