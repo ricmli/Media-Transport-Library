@@ -4,38 +4,101 @@
 
 #include "mt_rbtree.h"
 
-static int rbtree_rotate_left(struct mt_rbtree* tree, struct mt_rbtree_node* pivot) {
+static int rbtree_rotate_left(struct mt_rbtree_node* pivot) {
   struct mt_rbtree_node* right = pivot->right;
   if (!right) {
     err("no right child, cannot rotate left");
     return -EIO;
   }
+  struct mt_rbtree_node* parent = pivot->parent;
 
   pivot->right = right->left;
   if (right->left) {
     right->left->parent = pivot;
   }
   right->left = pivot;
-  right->parent = pivot->parent;
   pivot->parent = right;
+  right->parent = parent;
+  if (parent) {
+    if (parent->right == pivot)
+      parent->right = right;
+    else
+      parent->left = right;
+  }
 
   return 0;
 }
 
-static int rbtree_rotate_right(struct mt_rbtree* tree, struct mt_rbtree_node* pivot) {
+static int rbtree_rotate_right(struct mt_rbtree_node* pivot) {
   struct mt_rbtree_node* left = pivot->left;
   if (!left) {
     err("no left child, cannot rotate right");
     return -EIO;
   }
+  struct mt_rbtree_node* parent = pivot->parent;
 
   pivot->left = left->right;
   if (left->right) {
     left->right->parent = pivot;
   }
   left->right = pivot;
-  left->parent = pivot->parent;
   pivot->parent = left;
+  left->parent = parent;
+  if (parent) {
+    if (parent->left == pivot)
+      parent->left = left;
+    else
+      parent->right = left;
+  }
+
+  return 0;
+}
+
+static inline void rbtree_node_swap_color(struct mt_rbtree_node* x,
+                                          struct mt_rbtree_node* y) {
+  enum mt_rbtree_color temp = x->color;
+  x->color = y->color;
+  y->color = temp;
+}
+
+static int rbtree_add_fix(struct mt_rbtree_node* node) {
+  struct mt_rbtree_node* parent = node->parent;
+  if (!parent) { /* root node */
+    node->color = MT_RBTREE_BLACK;
+    return 0;
+  }
+  if (parent->color == MT_RBTREE_BLACK) return 0;
+  bool node_left = parent->left == node;
+
+  struct mt_rbtree_node* grandparent = parent->parent;
+  if (!grandparent) return 0; /* parent is root node */
+  bool parent_left = grandparent->left == parent;
+  struct mt_rbtree_node* uncle = parent_left ? grandparent->right : grandparent->left;
+
+  if (uncle && uncle->color == MT_RBTREE_RED) {
+    uncle->color = MT_RBTREE_BLACK;
+    parent->color = MT_RBTREE_BLACK;
+    grandparent->color = MT_RBTREE_RED;
+    rbtree_add_fix(grandparent);
+  } else { /* uncle is balck (null is also black) */
+    if (parent_left) {
+      if (node_left) { /* ll case */
+        rbtree_rotate_right(grandparent);
+        rbtree_node_swap_color(parent, grandparent);
+      } else { /* lr case */
+        rbtree_rotate_left(parent);
+        rbtree_add_fix(parent);
+      }
+    } else {
+      if (node_left) { /* rl case */
+        rbtree_rotate_right(parent);
+        rbtree_add_fix(parent);
+      } else { /* rr case */
+        rbtree_rotate_left(grandparent);
+        rbtree_node_swap_color(parent, grandparent);
+      }
+    }
+  }
 
   return 0;
 }
@@ -55,11 +118,12 @@ int mt_rbtree_add(struct mt_rbtree* tree, uint64_t key, uint64_t value) {
       left = false;
     } else { /* already has key node */
       if (tmp->value == value) {
-        dbg("%s, duplicate value %" PRIu64 " for key %" PRIu64 "\n", __func__, value,
-            key);
+        warn("%s, duplicate value %" PRIu64 " for key %" PRIu64 "\n", __func__, value,
+             key);
       } else {
-        err("%s, conflict, old value: %" PRIu64 ", new value: %" PRIu64 "\n", __func__,
-            tmp->value, value);
+        err("%s, conflict for key %" PRIu64 ", old value: %" PRIu64
+            ", new value: %" PRIu64 "\n",
+            __func__, key, tmp->value, value);
       }
       return -EIO;
     }
@@ -93,30 +157,29 @@ int mt_rbtree_add(struct mt_rbtree* tree, uint64_t key, uint64_t value) {
   node->parent = parent;
   tree->size++;
 
-  if (parent->color == MT_RBTREE_RED) {
-    /* do something */
-  }
+  rbtree_add_fix(node);
 
   return 0;
 }
 
-int mt_rbtree_del(struct mt_rbtree* tree, uint64_t key) {
-  struct mt_rbtree_node* node = mt_rbtree_find(tree, key);
-  if (!node) {
-    err("%s, node not found\n", __func__);
-    return -EIO;
-  }
+static int rbtree_del_fix(struct mt_rbtree* tree, struct mt_rbtree_node* parent,
+                          bool left) {
+  struct mt_rbtree_node* sibling = NULL;
+}
 
+/* delete the node which has only one or no child */
+static int rbtree_del_none_twins(struct mt_rbtree* tree, struct mt_rbtree_node* node) {
   bool need_fix = true;
   struct mt_rbtree_node* parent = node->parent;
+  bool left = parent ? parent->left == node : false;
 
-  if (!node->left && !node->right) { /* no children */
+  if (!node->left && !node->right) { /* no child */
     if (!parent) {
       /* root */
       tree->root = NULL;
       need_fix = false;
     } else {
-      if (parent->left == node) {
+      if (left) {
         parent->left = NULL;
       } else {
         parent->right = NULL;
@@ -131,7 +194,7 @@ int mt_rbtree_del(struct mt_rbtree* tree, uint64_t key) {
       tree->root->parent = NULL;
       /* may need change color*/
     } else {
-      if (parent->left == node) {
+      if (left) {
         parent->left = node->right;
       } else {
         parent->right = node->right;
@@ -147,7 +210,7 @@ int mt_rbtree_del(struct mt_rbtree* tree, uint64_t key) {
       tree->root->parent = NULL;
       /* may need change color*/
     } else {
-      if (parent->left == node) {
+      if (left) {
         parent->left = node->left;
       } else {
         parent->right = node->left;
@@ -156,27 +219,37 @@ int mt_rbtree_del(struct mt_rbtree* tree, uint64_t key) {
       if (node->color == MT_RBTREE_RED) need_fix = false;
     }
     mt_rte_free(node);
-  } else { /* both children */
-    struct mt_rbtree_node* tmp = node->right;
-    while (tmp->left) {
-      tmp = tmp->left;
-    }
-    node->key = tmp->key;
-    node->value = tmp->value;
-    parent = tmp->parent;
-    if (parent->left == tmp) {
-      parent->left = tmp->right;
-    } else {
-      parent->right = tmp->right;
-    }
-    if (tmp->right) {
-      tmp->right->parent = parent;
-    }
-    mt_rte_free(tmp);
   }
 
   if (need_fix) {
-    /* do something */
+    rbtree_del_fix(tree, parent, left);
+  }
+
+  return 0;
+}
+
+int mt_rbtree_del(struct mt_rbtree* tree, uint64_t key) {
+  struct mt_rbtree_node* node = mt_rbtree_find(tree, key);
+  if (!node) {
+    err("%s, node not found\n", __func__);
+    return -EIO;
+  }
+
+  struct mt_rbtree_node* parent = node->parent;
+  bool left = parent ? parent->left == node : false;
+
+  if (node->left && node->right) { /* have both children */
+    /* find successor node of inorder traversal, replace */
+    struct mt_rbtree_node* successor = node->right;
+    while (successor->left) {
+      successor = successor->left;
+    }
+    node->key = successor->key;
+    node->value = successor->value;
+    /* the successor should have null left child */
+    rbtree_del_none_twins(tree, successor);
+  } else {
+    rbtree_del_none_twins(tree, node);
   }
 
   return 0;
