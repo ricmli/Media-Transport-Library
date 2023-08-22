@@ -6,10 +6,87 @@
 
 #include "mt_log.h"
 
+void mt_rbtree_print(struct mt_rbtree* tree) {
+  if (!tree) {
+    err("%s, tree is null\n", __func__);
+    return;
+  }
+  struct mt_rbtree_node* node = tree->root;
+  if (!node) {
+    err("%s, root is null\n", __func__);
+    return;
+  }
+
+  info("tree size: %d\n", tree->size);
+  /* inorder traversal */
+  struct mt_rbtree_node* stack[tree->size];
+  int top = 0;
+  while (node || top > 0) {
+    while (node) {
+      stack[top++] = node;
+      node = node->left;
+    }
+    node = stack[--top];
+    info("key: %" PRIu64 ", value: %" PRIu64 ", color: %s\n", node->key, node->value,
+         node->color == MT_RBTREE_RED ? "red" : "black");
+    node = node->right;
+  }
+}
+
+bool mt_rbtree_is_balanced(struct mt_rbtree* tree) {
+  if (!tree) {
+    err("%s, tree is null\n", __func__);
+    return false;
+  }
+  struct mt_rbtree_node* node = tree->root;
+  if (!node) {
+    err("%s, root is null\n", __func__);
+    return false;
+  }
+
+  /* inorder traversal */
+  struct mt_rbtree_node* stack[tree->size];
+  int top = 0;
+  int black_count = 0;
+  int black_count_tmp = 0;
+  while (node || top > 0) {
+    while (node) {
+      stack[top++] = node;
+      if (node->color == MT_RBTREE_BLACK) {
+        black_count_tmp++;
+      }
+      node = node->left;
+    }
+    node = stack[--top];
+    if (!node->left && !node->right) {
+      if (black_count == 0) {
+        black_count = black_count_tmp;
+      } else if (black_count != black_count_tmp) {
+        err("%s, black count not equal, black_count: %d, black_count_tmp: %d\n", __func__,
+            black_count, black_count_tmp);
+        return false;
+      }
+    }
+    if (node->color == MT_RBTREE_RED) {
+      if (node->left && node->left->color == MT_RBTREE_RED) {
+        err("%s, red node has red left child, key: %" PRIu64 "\n", __func__, node->key);
+        return false;
+      }
+      if (node->right && node->right->color == MT_RBTREE_RED) {
+        err("%s, red node has red right child, key: %" PRIu64 "\n", __func__, node->key);
+        return false;
+      }
+    }
+    node = node->right;
+  }
+
+  return true;
+}
+
 static int rbtree_rotate_left(struct mt_rbtree_node* pivot) {
   struct mt_rbtree_node* right = pivot->right;
   if (!right) {
-    err("no right child, cannot rotate left\n");
+    err("%s, right child is null\n", __func__);
     return -EIO;
   }
   struct mt_rbtree_node* parent = pivot->parent;
@@ -34,7 +111,7 @@ static int rbtree_rotate_left(struct mt_rbtree_node* pivot) {
 static int rbtree_rotate_right(struct mt_rbtree_node* pivot) {
   struct mt_rbtree_node* left = pivot->left;
   if (!left) {
-    err("no left child, cannot rotate right\n");
+    err("%s, left child is null\n", __func__);
     return -EIO;
   }
   struct mt_rbtree_node* parent = pivot->parent;
@@ -301,6 +378,7 @@ int mt_rbtree_del(struct mt_rbtree* tree, uint64_t key) {
   } else {
     rbtree_del_none_twins(tree, node);
   }
+  tree->size--;
 
   return 0;
 }

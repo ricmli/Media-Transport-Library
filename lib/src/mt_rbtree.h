@@ -29,10 +29,14 @@ struct mt_rbtree {
   int soc_id;                  /* for numa memory allocation */
 };
 
+struct mt_rbtree* mt_rbtree_init(int soc_id);
+int mt_rbtree_uinit(struct mt_rbtree* tree);
 int mt_rbtree_add(struct mt_rbtree* tree, uint64_t key, uint64_t value);
 int mt_rbtree_del(struct mt_rbtree* tree, uint64_t key);
 struct mt_rbtree_node* mt_rbtree_find(struct mt_rbtree* tree, uint64_t key);
-struct mt_rbtree* mt_rbtree_init(int soc_id);
-int mt_rbtree_uinit(struct mt_rbtree* tree);
+
+/* for debug use */
+void mt_rbtree_print(struct mt_rbtree* tree);
+bool mt_rbtree_is_balanced(struct mt_rbtree* tree);
 
 #endif
