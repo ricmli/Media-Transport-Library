@@ -4,10 +4,12 @@
 
 #include "mt_rbtree.h"
 
+#include "mt_log.h"
+
 static int rbtree_rotate_left(struct mt_rbtree_node* pivot) {
   struct mt_rbtree_node* right = pivot->right;
   if (!right) {
-    err("no right child, cannot rotate left");
+    err("no right child, cannot rotate left\n");
     return -EIO;
   }
   struct mt_rbtree_node* parent = pivot->parent;
@@ -32,7 +34,7 @@ static int rbtree_rotate_left(struct mt_rbtree_node* pivot) {
 static int rbtree_rotate_right(struct mt_rbtree_node* pivot) {
   struct mt_rbtree_node* left = pivot->left;
   if (!left) {
-    err("no left child, cannot rotate right");
+    err("no left child, cannot rotate right\n");
     return -EIO;
   }
   struct mt_rbtree_node* parent = pivot->parent;
@@ -162,14 +164,70 @@ int mt_rbtree_add(struct mt_rbtree* tree, uint64_t key, uint64_t value) {
   return 0;
 }
 
-static int rbtree_del_fix(struct mt_rbtree* tree, struct mt_rbtree_node* parent,
-                          bool left) {
-  struct mt_rbtree_node* sibling = NULL;
+static int rbtree_del_fix(struct mt_rbtree_node* node) {
+  /* no need to fix red leaf deletion
+   */
+  if (node->color == MT_RBTREE_RED) return 0;
+
+  /* fix double black node
+   */
+  struct mt_rbtree_node* parent = node->parent;
+  if (!parent) return 0; /* root node */
+  bool node_left = parent->left == node;
+  /* a black node always have non-nil sibling */
+  struct mt_rbtree_node* sibling = node_left ? parent->right : parent->left;
+  /* do not check nil sibling because it's an unrecheable fault */
+  if (sibling->color == MT_RBTREE_RED) {
+    rbtree_node_swap_color(parent, sibling);
+    if (node_left) { /* sibling right case */
+      rbtree_rotate_left(parent);
+    } else { /* sibling left case */
+      rbtree_rotate_right(parent);
+    }
+    rbtree_del_fix(node);
+  } else { /* sibling is black */
+    if (node_left) {
+      if (sibling->right && sibling->right->color == MT_RBTREE_RED) {
+        rbtree_node_swap_color(sibling, parent);
+        rbtree_rotate_left(parent);
+        sibling->right->color = MT_RBTREE_BLACK;
+      } else if (sibling->left && sibling->left->color == MT_RBTREE_RED) {
+        rbtree_node_swap_color(sibling, sibling->left);
+        rbtree_rotate_right(sibling);
+        rbtree_del_fix(node);
+      } else {
+        sibling->color = MT_RBTREE_RED;
+        if (parent->color == MT_RBTREE_RED) {
+          parent->color = MT_RBTREE_BLACK;
+        } else {
+          rbtree_del_fix(parent);
+        }
+      }
+    } else {
+      if (sibling->left && sibling->left->color == MT_RBTREE_RED) {
+        rbtree_node_swap_color(sibling, parent);
+        rbtree_rotate_right(parent);
+        sibling->left->color = MT_RBTREE_BLACK;
+      } else if (sibling->right && sibling->right->color == MT_RBTREE_RED) {
+        rbtree_node_swap_color(sibling, sibling->right);
+        rbtree_rotate_left(sibling);
+        rbtree_del_fix(node);
+      } else {
+        sibling->color = MT_RBTREE_RED;
+        if (parent->color == MT_RBTREE_RED) {
+          parent->color = MT_RBTREE_BLACK;
+        } else {
+          rbtree_del_fix(parent);
+        }
+      }
+    }
+  }
+
+  return 0;
 }
 
 /* delete the node which has only one or no child */
 static int rbtree_del_none_twins(struct mt_rbtree* tree, struct mt_rbtree_node* node) {
-  bool need_fix = true;
   struct mt_rbtree_node* parent = node->parent;
   bool left = parent ? parent->left == node : false;
 
@@ -177,22 +235,20 @@ static int rbtree_del_none_twins(struct mt_rbtree* tree, struct mt_rbtree_node* 
     if (!parent) {
       /* root */
       tree->root = NULL;
-      need_fix = false;
     } else {
       if (left) {
         parent->left = NULL;
       } else {
         parent->right = NULL;
       }
-      if (node->color == MT_RBTREE_RED) need_fix = false;
     }
-    mt_rte_free(node);
+    rbtree_del_fix(node);
   } else if (!node->left) { /* only right child */
     if (!parent) {
       /* root */
       tree->root = node->right;
       tree->root->parent = NULL;
-      /* may need change color*/
+      tree->root->color = MT_RBTREE_BLACK;
     } else {
       if (left) {
         parent->left = node->right;
@@ -200,15 +256,15 @@ static int rbtree_del_none_twins(struct mt_rbtree* tree, struct mt_rbtree_node* 
         parent->right = node->right;
       }
       node->right->parent = parent;
-      if (node->color == MT_RBTREE_RED) need_fix = false;
+      node->right->color = MT_RBTREE_BLACK; /* single child is always red */
     }
-    mt_rte_free(node);
+
   } else if (!node->right) { /* only left child */
     if (!parent) {
       /* root */
       tree->root = node->left;
       tree->root->parent = NULL;
-      /* may need change color*/
+      tree->root->color = MT_RBTREE_BLACK;
     } else {
       if (left) {
         parent->left = node->left;
@@ -216,14 +272,11 @@ static int rbtree_del_none_twins(struct mt_rbtree* tree, struct mt_rbtree_node* 
         parent->right = node->left;
       }
       node->left->parent = parent;
-      if (node->color == MT_RBTREE_RED) need_fix = false;
+      node->left->color = MT_RBTREE_BLACK; /* single child is always red */
     }
-    mt_rte_free(node);
   }
 
-  if (need_fix) {
-    rbtree_del_fix(tree, parent, left);
-  }
+  mt_rte_free(node);
 
   return 0;
 }
@@ -234,9 +287,6 @@ int mt_rbtree_del(struct mt_rbtree* tree, uint64_t key) {
     err("%s, node not found\n", __func__);
     return -EIO;
   }
-
-  struct mt_rbtree_node* parent = node->parent;
-  bool left = parent ? parent->left == node : false;
 
   if (node->left && node->right) { /* have both children */
     /* find successor node of inorder traversal, replace */
@@ -286,8 +336,8 @@ struct mt_rbtree* mt_rbtree_init(int soc_id) {
 static int rbtree_node_recursive_free(struct mt_rbtree_node* node) {
   if (!node) return 0;
 
-  tree_node_recursive_free(node->left);
-  tree_node_recursive_free(node->right);
+  rbtree_node_recursive_free(node->left);
+  rbtree_node_recursive_free(node->right);
   mt_rte_free(node);
 
   return 0;
