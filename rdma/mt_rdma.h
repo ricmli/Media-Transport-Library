@@ -192,13 +192,6 @@ static inline struct mtl_rdma_init_params* mt_rdma_get_params(struct mt_rdma_imp
   return &impl->para;
 }
 
-static inline bool mt_rdma_low_latency(struct mt_rdma_impl* impl) {
-  if (mt_rdma_get_params(impl)->flags & MTL_RDMA_FLAG_LOW_LATENCY)
-    return true;
-  else
-    return false;
-}
-
 static inline int mt_rdma_handle_cq_events(struct ibv_comp_channel* cc,
                                            struct ibv_cq* cq) {
   void* cq_ctx = NULL;

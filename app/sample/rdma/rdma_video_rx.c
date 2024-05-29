@@ -113,7 +113,6 @@ int main(int argc, char** argv) {
   mtl_rdma_rx_handle rx = NULL;
   struct mtl_rdma_init_params p = {
       .log_level = MTL_RDMA_LOG_LEVEL_INFO,
-      //.flags = MTL_RDMA_FLAG_LOW_LATENCY,
   };
   mrh = mtl_rdma_init(&p);
   if (!mrh) {
@@ -142,6 +141,7 @@ int main(int argc, char** argv) {
       .buffers = buffers,
       .buffer_capacity = frame_size,
       .notify_buffer_ready = rx_notify_buffer_ready,
+      //.flags = MTL_RDMA_RX_FLAG_LOW_LATENCY,
   };
 
   rx = mtl_rdma_rx_create(mrh, &rx_ops);

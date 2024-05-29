@@ -510,7 +510,7 @@ mtl_rdma_tx_handle mtl_rdma_tx_create(mtl_rdma_handle mrh, struct mtl_rdma_tx_op
   ctx->ops = *ops;
   ctx->buffer_seq_num = 0;
   snprintf(ctx->ops_name, 32, "%s", ops->name);
-  ctx->cq_poll_only = mt_rdma_low_latency(mrh);
+  ctx->cq_poll_only = (ops->flags & MTL_RDMA_TX_FLAG_LOW_LATENCY) ? true : false;
 
   ret = rdma_tx_alloc_buffers(ctx);
   if (ret) {

@@ -74,6 +74,23 @@ struct mtl_rdma_buffer {
   size_t user_meta_size;
 };
 
+/** MTL RDMA TX flag */
+enum mtl_rdma_tx_flag {
+  /**
+   * Enable low latency mode for buffer transport.
+   * The TX will poll for work completions.
+   * This will cause extra CPU usage. Recommend not to use this,
+   * because When RX enables low latency mode, TX helps little here.
+   */
+  MTL_RDMA_TX_FLAG_LOW_LATENCY = (MTL_RDMA_BIT64(0)),
+  /**
+   * Enable dual queue pair mode.
+   * The buffer will be sent equally with two queue pairs.
+   * This requires same configuration for RX.
+   */
+  MTL_RDMA_TX_FLAG_DUAL_QP = (MTL_RDMA_BIT64(1)),
+};
+
 /** The structure describing how to create a TX session. */
 struct mtl_rdma_tx_ops {
   /** RDMA server ip. */
@@ -91,6 +108,8 @@ struct mtl_rdma_tx_ops {
   const char* name;
   /** Optional. Private data to the callback function */
   void* priv;
+  /** Optional. Flags to control session behaviors. See MTL_RDMA_TX_FLAG_*. */
+  uint32_t flags;
   /**
    * Optional. Callback function to notify the buffer is sent by local side.
    * Implement with non-blocking function as it runs in the polling thread.
@@ -154,6 +173,22 @@ struct mtl_rdma_buffer* mtl_rdma_tx_get_buffer(mtl_rdma_tx_handle handle);
  */
 int mtl_rdma_tx_put_buffer(mtl_rdma_tx_handle handle, struct mtl_rdma_buffer* buffer);
 
+/** MTL RDMA RX flag */
+enum mtl_rdma_rx_flag {
+  /**
+   * Enable low latency mode for buffer transport.
+   * The RX will poll for work completions.
+   * This will cause extra CPU usage.
+   */
+  MTL_RDMA_RX_FLAG_LOW_LATENCY = (MTL_RDMA_BIT64(0)),
+  /**
+   * Enable dual queue pair mode.
+   * The buffer will be received equally with two queue pairs.
+   * This requires same configuration for TX.
+   */
+  MTL_RDMA_RX_FLAG_DUAL_QP = (MTL_RDMA_BIT64(1)),
+};
+
 /** The structure describing how to create an RX session. */
 struct mtl_rdma_rx_ops {
   /** Local RDMA interface ip */
@@ -173,6 +208,8 @@ struct mtl_rdma_rx_ops {
   const char* name;
   /** Optional. Private data to the callback function */
   void* priv;
+  /** Optional. Flags to control session behaviors. See MTL_RDMA_RX_FLAG_*. */
+  uint32_t flags;
   /**
    * Callback function to notify the buffer is ready to consume.
    * Implement with non-blocking function as it runs in the polling thread.
@@ -230,22 +267,6 @@ struct mtl_rdma_buffer* mtl_rdma_rx_get_buffer(mtl_rdma_rx_handle handle);
  *   - <0: Error code if put fail.
  */
 int mtl_rdma_rx_put_buffer(mtl_rdma_rx_handle handle, struct mtl_rdma_buffer* buffer);
-
-/** MTL RDMA init flag */
-enum mtl_rdma_init_flag {
-  /** Lib will bind app thread and memory to RDMA device numa node.*/
-  MTL_RDMA_FLAG_BIND_NUMA = (MTL_RDMA_BIT64(0)),
-  /**
-   * Enable low latency mode for buffer transport.
-   * The TX and RX will poll for work completions.
-   * It will cause extra CPU usage.
-   */
-  MTL_RDMA_FLAG_LOW_LATENCY = (MTL_RDMA_BIT64(1)),
-  /** Enable shared receive queue for all sessions. */
-  MTL_RDMA_FLAG_ENABLE_SRQ = (MTL_RDMA_BIT64(2)),
-  /** Enable shared completion queue for all sessions. */
-  MTL_RDMA_FLAG_SHARED_CQ = (MTL_RDMA_BIT64(3)),
-};
 
 /**
  * The structure describing how to initialize RDMA transport.
