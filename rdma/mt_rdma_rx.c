@@ -43,9 +43,14 @@ static int rdma_rx_uinit_mrs(struct mt_rdma_rx_ctx* ctx) {
 static int rdma_rx_init_mrs(struct mt_rdma_rx_ctx* ctx) {
   for (int i = 0; i < ctx->buffer_cnt; i++) {
     struct mt_rdma_rx_buffer* rx_buffer = &ctx->rx_buffers[i];
+    struct mtl_rdma_buffer* buffer = &rx_buffer->buffer;
     struct ibv_mr* mr =
-        ibv_reg_mr(ctx->pd, rx_buffer->buffer.addr, rx_buffer->buffer.capacity,
-                   IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
+        buffer->dmabuf_fd > 0
+            ? ibv_reg_dmabuf_mr(ctx->pd, 0, buffer->capacity, (uint64_t)buffer->addr,
+                                buffer->dmabuf_fd,
+                                IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE)
+            : ibv_reg_mr(ctx->pd, buffer->addr, buffer->capacity,
+                         IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
     if (!mr) {
       err("%s(%s), ibv_reg_mr failed\n", __func__, ctx->ops_name);
       rdma_rx_uinit_mrs(ctx);
@@ -120,6 +125,7 @@ static int rdma_rx_alloc_buffers(struct mt_rdma_rx_ctx* ctx) {
     rx_buffer->status = MT_RDMA_BUFFER_STATUS_FREE;
     rx_buffer->buffer.addr = ops->buffers[i];
     rx_buffer->buffer.capacity = ops->buffer_capacity;
+    rx_buffer->buffer.dmabuf_fd = ops->dmabuf_fds ? ops->dmabuf_fds[i] : -1;
     rx_buffer->buffer.user_meta = ctx->meta_region + i * MT_RDMA_MSG_MAX_SIZE;
     pthread_mutex_init(&rx_buffer->lock, NULL);
   }

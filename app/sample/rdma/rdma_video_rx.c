@@ -2,7 +2,9 @@
  * Copyright(c) 2024 Intel Corporation
  */
 
+#include <fcntl.h>
 #include <inttypes.h>
+#include <linux/types.h>
 #include <mtl_rdma/mtl_rdma_api.h>
 #include <pthread.h>
 #include <signal.h>
@@ -11,13 +13,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
 
+#undef APP_HAS_SDL2
 #ifdef APP_HAS_SDL2
 #include <SDL2/SDL.h>
 #endif
+
+#define KVMFR_DMABUF_FLAG_CLOEXEC 0x1
+
+struct kvmfr_dmabuf_create {
+  __u8 flags;
+  __u64 offset;
+  __u64 size;
+};
+
+#define KVMFR_DMABUF_GETSIZE _IO('u', 0x44)
+#define KVMFR_DMABUF_CREATE _IOW('u', 0x42, struct kvmfr_dmabuf_create)
 
 #define NANOSECONDS_IN_SECOND 1000000000
 
@@ -103,6 +118,12 @@ int main(int argc, char** argv) {
   }
 #endif
 
+  int fd = open("/dev/kvmfr0", O_RDWR);
+  if (fd < 0) {
+    perror("open");
+    return -1;
+  }
+
   if (argc != 4) {
     printf("Usage: %s <local_ip> <ip> <port>\n", argv[0]);
     return -1;
@@ -111,6 +132,7 @@ int main(int argc, char** argv) {
 
   int ret = 0;
   void* buffers[3] = {};
+  int fds[3] = {};
   mtl_rdma_handle mrh = NULL;
   mtl_rdma_rx_handle rx = NULL;
   struct mtl_rdma_init_params p = {
@@ -125,14 +147,21 @@ int main(int argc, char** argv) {
   }
 
   size_t frame_size = 1920 * 1080 * 2; /* UYVY */
+  size_t aligned_size = frame_size & ~(getpagesize() - 1);
+  struct kvmfr_dmabuf_create create = {
+      .flags = KVMFR_DMABUF_FLAG_CLOEXEC,
+      .offset = 0x0,
+      .size = aligned_size,
+  };
   for (int i = 0; i < 3; i++) {
-    buffers[i] = mmap(NULL, frame_size, PROT_READ | PROT_WRITE,
-                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+    fds[i] = ioctl(fd, KVMFR_DMABUF_CREATE, &create);
+    buffers[i] = mmap(NULL, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED, fds[i], 0);
     if (buffers[i] == MAP_FAILED) {
       printf("Failed to allocate buffer\n");
       ret = -1;
       goto out;
     }
+    create.offset += aligned_size;
   }
 
   struct mtl_rdma_rx_ops rx_ops = {
@@ -215,9 +244,12 @@ out:
 
   for (int i = 0; i < 3; i++) {
     if (buffers[i] && buffers[i] != MAP_FAILED) munmap(buffers[i], frame_size);
+    close(fds[i]);
   }
 
   if (mrh) mtl_rdma_uinit(mrh);
+
+  close(fd);
 
 #ifdef APP_HAS_SDL2
   sdl_cleanup();

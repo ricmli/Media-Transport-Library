@@ -67,6 +67,8 @@ struct mtl_rdma_buffer {
   uint32_t seq_num;
   /** Buffer timestamp, use nanoseconds in lib */
   uint64_t timestamp;
+  /** DMABUF fd */
+  int dmabuf_fd;
 
   /** User metadata */
   void* user_meta;
@@ -86,6 +88,8 @@ struct mtl_rdma_tx_ops {
   void** buffers;
   /** The max size of each buffer, all buffers should have the same capacity. */
   size_t buffer_capacity;
+  /** DMABUF fds. */
+  int* dmabuf_fds;
 
   /** Session name */
   const char* name;
@@ -168,6 +172,8 @@ struct mtl_rdma_rx_ops {
   void** buffers;
   /** The max size of each buffer, all buffers should have the same capacity. */
   size_t buffer_capacity;
+  /** DMABUF fds. */
+  int* dmabuf_fds;
 
   /** Session name */
   const char* name;
