@@ -171,6 +171,7 @@ int main(int argc, char** argv) {
       .port = argv[3],
       .num_buffers = 3,
       .buffers = buffers,
+      .dmabuf_fds = fds,
       .buffer_capacity = frame_size,
       .notify_buffer_ready = rx_notify_buffer_ready,
   };
